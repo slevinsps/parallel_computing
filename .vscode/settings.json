@@ -44,6 +44,10 @@
     "memory_resource": "cpp",
     "random": "cpp",
     "string": "cpp",
-    "bit": "cpp"
+    "bit": "cpp",
+    "chrono": "cpp",
+    "ctime": "cpp",
+    "ratio": "cpp",
+    "thread": "cpp"
   }
 }

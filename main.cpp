@@ -3,166 +3,172 @@
 #include <vector>
 #include <string>
 #include <cmath>
+#include <fstream>   
+// #include <thread>
+// #include <mpi.h>
 
-class PrimeNumbersFinder {
-    public:          
-        std::vector<int> primes;
-        int limit;
-        std::vector<int> prime_steps;
-        std::vector<std::vector<int>> prime_steps_threads;
-
-    PrimeNumbersFinder(int n) {
-        limit = n;
-        m = sqrt(limit);
-        m += m & 1;
+int strike(int start, int limit, int step, std::vector<bool> &is_composite)
+{
+    for (; start < limit; start += step) {
+        is_composite[start] = true;
     }
+    return start;
+}
 
-    void findInFirstSqrtN(void) {        
-        std::vector<int> is_composite(m / 2);
-        for (int i = 3; i<= m; i += 2) 
+std::vector<int> findInFirstSqrtN(int window_size) {        
+    std::vector<bool> is_composite(window_size / 2);
+    std::vector<int> primeNumbersFirstSqrtN;
+    primeNumbersFirstSqrtN.reserve(window_size / 2);
+    int index = 0;
+
+    for (int i = 3; i<= window_size; i += 2) 
+    {
+        //если число ранее не было признано составным (т.е. это число простое)
+        if( !is_composite[i/2] ) 
         {
-            //если число ранее не было признано составным (т.е. это число простое)
-            if( !is_composite[i/2] ) 
-            {
-                // с шагом равному простому числу перемещаемся по интервалу [простое число/2; m/2]
-                // в результате вычеркнем все числа, делящиеся на простое число i (модифицируем массив is_composite)
-                strike(i * i / 2, m / 2, i, is_composite);
-                // запомним шаг\новое простое число
-                prime_steps.push_back(i);
-            }
+            // с шагом равному простому числу перемещаемся по интервалу [простое число/2; window_size/2]
+            // в результате вычеркнем все числа, делящиеся на простое число i (модифицируем массив is_composite)
+            strike(i * i / 2, window_size / 2, i, is_composite);
+            // запомним шаг\новое простое число
+            primeNumbersFirstSqrtN.push_back(i);
         }
-        for (auto i: prime_steps) {
-            std::cout << i << ' ';
-        } 
-        std::cout << "\n";
     }
 
-    int strike(int start, int limit, int step, std::vector<int> &is_composite)
-    {
-        for (; start<= limit; start += step) {
-            is_composite[start] = true;
-        }
-        return start;
-    }
+    // for (int i = 0; i < primeNumbersFirstSqrtN.size(); i++) {
+    //     std::cout << primeNumbersFirstSqrtN[i] << " ";
+    // }
+    // std::cout << "\n";
+    return primeNumbersFirstSqrtN;
+}
 
-    
-    std::vector<int> initialize(int start)
-    {
-        std::vector<int> to_strike(m / 2);
-        for (int k = 0; k < prime_steps.size(); k++)
+
+void findOnInterval(int start, int fin, int window_size, int limit, std::vector<int> &primeNumbersFirstSqrtN, std::vector<int> &primeNumbers_current) {
+    int current_window_size = window_size;
+    for (int j = start; j< fin; j += window_size) {
+        
+        std::vector<int> to_strike(window_size / 2);
+        for (int k = 0; k < primeNumbersFirstSqrtN.size(); k++)
         {
             // выберем простое число f (шаг)
-            int f = prime_steps[k];
+            int f = primeNumbersFirstSqrtN[k];
+            // std::cout << " " << f << "\n";
             
-            int p = (start - 1) / f * f % m;
+            int p = (j - 1) / f * f % window_size;
 
+            
             if (p & 1) {
-                to_strike[k] = (p + 2 * f - m) / 2;
+                to_strike[k] = (p + 2 * f - window_size) / 2;
             } else {
-                to_strike[k] = (p + f - m) / 2;
+                to_strike[k] = (p + f - window_size) / 2;
             }
+
+            // std::cout << to_strike[k] << "\n";
         }
-        return to_strike;
-    }
 
+        if (j + current_window_size > limit)
+            current_window_size = limit - j;
 
-    void findOnInterval(int start, int fin, std::vector<int> &prime_steps_current) {
-        int window_size = m;
-        for (int j = start; j< fin; j += window_size) {
-            std::vector<int> to_strike = initialize(j);
-            if (start + window_size > limit)
-                window_size = limit - start;
-            std::vector<int> is_composite(window_size / 2);
-            
-
-            for(int k=0; k < prime_steps.size(); ++k ) {
-                to_strike[k] = strike( to_strike[k], window_size/2, prime_steps[k], is_composite);
-            }
-            for( int k=0; k < window_size/2; k++) 
+        std::vector<bool> is_composite(window_size / 2);
+        
+        // std::cout << current_window_size << " " << j << " " << limit << "\n";
+        for(int k=0; k < primeNumbersFirstSqrtN.size(); ++k ) {
+            // std::cout << to_strike[k] << " " << current_window_size/2 << " " << primeNumbersFirstSqrtN[k] << "\n";
+            strike( to_strike[k], current_window_size/2, primeNumbersFirstSqrtN[k], is_composite);
+            // std::cout << to_strike[k] << " " << current_window_size/2 << "\n";
+        }
+        for( int k=0; k < current_window_size/2; k++) 
+        {
+            if (!is_composite[k]) 
             {
-                if (!is_composite[k]) 
-                {
-                    prime_steps_current.push_back(j+2*k+1);
-                }
+                primeNumbers_current.push_back(j+2*k+1);
             }
         }
     }
+}
 
-    int find(void) {
-        int totalCountPrimes = 1;
-        if( limit >= 3 ) {
-            int window_size = m;
-            // запомним количество простых чисел, найденных на первом этапе
-            findInFirstSqrtN();
-            
-            
-            int threads = 2;
 
-            if(threads>window_size)
+void find(int limit, int numThreads, const char* resFileName) 
+{
+    int window_size = sqrt(limit);
+    window_size += window_size & 1;
+
+    std::vector<std::vector<int>> primeNumbersnumThreads;
+    std::vector<int> primeNumbersFirstSqrtN;
+
+    if( limit >= 3 ) {
+        // запомним количество простых чисел, найденных на первом этапе
+        primeNumbersFirstSqrtN = findInFirstSqrtN(window_size);
+        
+        if(numThreads>window_size)
+        {
+            std::cout << "numThreads>window_size";
+        }
+
+        // целое количество поддиапазонов в рассматриваемом диапазоне [2..n)
+        // первый поддиапазон был обработан при создании решета s
+        int windows_n = (limit  / window_size)-1;
+        // остаток элементов
+        int modn = limit % window_size;
+        // целое количество поддиапазонов, приходящихся на один поток
+        int q = windows_n / numThreads;
+        // оставшиеся число поддиапазонов
+        int r = windows_n % numThreads; 
+        
+        primeNumbersnumThreads.resize(numThreads);
+        // второй этап алгоритма - параллельный поиск простых чисел по поддиапазонам
+        for (int i = 0; i < numThreads; i++)
+        {
+            // начало интервала (интервал состоит из нескольких поддиапазонов)
+            int start;
+            // конец интервала 
+            int fin;
+            if (i < r)
             {
-                std::cout << "threads>window_size";
-            }
-
-            // целое количество поддиапазонов в рассматриваемом диапазоне [2..n)
-            // первый поддиапазон был обработан при создании решета s
-            int windows_n = (limit  / window_size)-1;
-            // остаток элементов
-            int modn = limit % window_size;
-            // целое количество поддиапазонов, приходящихся на один поток
-            int q = windows_n / threads;
-            // оставшиеся число поддиапазонов
-            int r = windows_n % threads; 
-            
-            prime_steps_threads.resize(threads);
-            // второй этап алгоритма - параллельный поиск простых чисел по поддиапазонам
-            for (int i = 0; i < threads; i++)
-            {
-                // начало интервала (интервал состоит из нескольких поддиапазонов)
-                int start;
-                // конец интервала 
-                int fin;
-                if (i < r)
-                {
-                    start = i * (q + 1) + 1;
-                    fin = start + q + 1;
-                    
-                }
-                else
-                {
-                    start = (r * (q + 1) + (i - r) * q) + 1;
-                    fin = start + q;
-                }
-
-                start *= window_size;
-                fin *= window_size;
+                start = i * (q + 1) + 1;
+                fin = start + q + 1;
                 
-                if (i == threads - 1) {
-                    fin += modn;
-                }
+            }
+            else
+            {
+                start = (r * (q + 1) + (i - r) * q) + 1;
+                fin = start + q;
+            }
 
-                findOnInterval(start, fin, prime_steps_threads[i]);
+            start *= window_size;
+            fin *= window_size;
+            
+            if (i == numThreads - 1) {
+                fin += modn;
             }
+            // std::cout << start << " " << fin << "\n";
+            primeNumbersnumThreads[i].reserve((fin - start) / 2);
+            findOnInterval(start, fin, window_size, limit, primeNumbersFirstSqrtN, primeNumbersnumThreads[i]);
+            // threads.push_back(std::thread(std::ref(findOnInterval), start, fin, window_size, limit, primeNumbersFirstSqrtN, primeNumbersnumThreads[i]));
+            // threads.push_back(std::thread(findOnInterval____, start, fin, window_size, limit, primeNumbersFirstSqrtN));
+            
         }
-        for (int i = 0; i < prime_steps_threads.size(); i++) {
-            for (int j = 0; j < prime_steps_threads[i].size(); j++) {
-                std::cout << prime_steps_threads[i][j] << " ";
-            }
-            std::cout << "\n";
-        }
-        return totalCountPrimes;
     }
 
-    ~PrimeNumbersFinder() {
-    }
 
-    private:
-        int m;
-        int mHalf;
-};
+    std::ofstream file(resFileName);
+    file << "2\n";
+    std::cout << "2 ";
+    for (int i = 0; i < primeNumbersFirstSqrtN.size(); i++) {
+        file << primeNumbersFirstSqrtN[i] << "\n";
+        std::cout << primeNumbersFirstSqrtN[i] << " ";
+    }
+    for (int i = 0; i < primeNumbersnumThreads.size(); i++) {
+        for (int j = 0; j < primeNumbersnumThreads[i].size(); j++) {
+            file << primeNumbersnumThreads[i][j] << "\n";
+            std::cout << primeNumbersnumThreads[i][j] << " ";
+        }
+    }
+}
+
 
 int main() {
-    int n = 100;
-    PrimeNumbersFinder primeNumbersFinder(n);
-    primeNumbersFinder.find();
+    int limit = 3;
+    int numThreads = 1;
+    find(limit, numThreads, "res.txt");
     return 0;
 }
